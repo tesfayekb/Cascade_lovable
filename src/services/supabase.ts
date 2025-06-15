@@ -18,11 +18,14 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 // Create a single instance of the Supabase client to reuse
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    autoRefreshToken: false, // We'll handle token refresh manually to ensure proper implementation
+    autoRefreshToken: true, // Enable auto refresh for more reliable session handling
     persistSession: true,
     detectSessionInUrl: true,
   },
 });
+
+// Log supabase initialization for debugging
+console.log('Supabase client initialized with URL:', SUPABASE_URL);
 
 // Export a default instance for ease of importing
 export default supabase;

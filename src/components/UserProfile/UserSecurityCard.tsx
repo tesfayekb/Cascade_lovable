@@ -4,6 +4,12 @@ import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Switch from "../form/switch/Switch";
 import { useAuth } from "../../context/auth";
+import authService from "../../services/authService";
+import { RecoveryCode } from "../../types/auth";
+
+type AuthError = {
+  message: string;
+};
 
 export default function UserSecurityCard() {
   const { isOpen, openModal, closeModal } = useModal();
@@ -14,7 +20,10 @@ export default function UserSecurityCard() {
   );
   const [showQRCode, setShowQRCode] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
-  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [recoveryCodes, setRecoveryCodes] = useState<RecoveryCode[]>([]);
+  const [manualEntryCode, setManualEntryCode] = useState<string>('LVFG2Q7HRAAHXNP2JZPEAUKTJAUH2SLG');
+  const [qrCode, setQrCode] = useState<string>("");
+  const [secret, setSecret] = useState<string>("");
   const [step, setStep] = useState<"setup" | "verify" | "complete">("setup");
   const [error, setError] = useState("");
 
@@ -37,50 +46,157 @@ export default function UserSecurityCard() {
     }
   };
 
+  // Check if a user already has 2FA enabled
+  const check2FAStatus = async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      console.log('Checking 2FA status...');
+      
+      // Get MFA status
+      const mfaStatus = await authService.getMFAStatus();
+      console.log('MFA Status:', mfaStatus);
+      
+      if (mfaStatus.enabled) {
+        // User already has 2FA enabled
+        setTwoFactorEnabled(true);
+        if (updateSecurityPreferences) {
+          updateSecurityPreferences({
+            multifactorAuthEnabled: true,
+            backupCodesGenerated: true
+          });
+        }
+        setIsLoading(false);
+        closeModal();
+        return true;
+      }
+      
+      setIsLoading(false);
+      return false;
+    } catch (error: unknown) {
+      const authError = error as AuthError;
+      console.error('Error checking 2FA status:', error);
+      setError(authError.message || "Failed to check two-factor authentication status");
+      setIsLoading(false);
+      return false;
+    }
+  };
+  
   // Handle enabling 2FA
   const handleEnable2FA = async () => {
     try {
       setIsLoading(true);
       setError("");
+      console.log('Starting 2FA enrollment process...');
       
-      // In production, this would call the real 2FA setup API
-      // await authService.setupTwoFactorAuth();
+      // Check if 2FA is already enabled
+      const isEnabled = await check2FAStatus();
+      if (isEnabled) {
+        console.log('2FA already enabled, not proceeding with enrollment');
+        return;
+      }
       
-      // Mock the QR code setup for development
-      setTimeout(() => {
-        setShowQRCode(true);
-        setIsLoading(false);
-        // Move to verification step
-        setStep("verify");
-      }, 1000);
-    } catch (error: any) {
-      setError(error.message || "Failed to set up two-factor authentication");
+      // Call the real 2FA enrollment API
+      const result = await authService.enrollMFA();
+      
+      // Enhanced debugging for QR code data
+      console.log('QR Code received:', {
+        qrCodeReceived: !!result.qrCode,
+        qrCodeLength: result.qrCode ? result.qrCode.length : 0,
+        qrCodeStart: result.qrCode ? result.qrCode.substring(0, 50) + '...' : 'No QR code',
+        qrCodeFormat: result.qrCode ? 
+          (result.qrCode.startsWith('data:image') ? 'data URL' : 
+           result.qrCode.startsWith('https://chart.googleapis.com') ? 'Google Charts URL' : 
+           'Other URL format') : 'No format',
+        secretReceived: !!result.secret,
+        secretLength: result.secret ? result.secret.length : 0
+      });
+      
+      setQrCode(result.qrCode);
+      setSecret(result.secret);
+      if (result.secret) {
+        setManualEntryCode(result.secret);
+      }
+      setShowQRCode(true);
+      setIsLoading(false);
+      // Move to verification step
+      setStep("verify");
+    } catch (error: unknown) {
+      const authError = error as AuthError;
+      console.error('2FA enrollment failed:', error);
+      
+      // Special handling for "already exists" errors - probably means 2FA is already setup
+      if (authError.message?.toLowerCase().includes('already exists')) {
+        await check2FAStatus();
+        return;
+      }
+      
+      setError(authError.message || "Failed to set up two-factor authentication");
       setIsLoading(false);
     }
   };
 
   // Handle disabling 2FA
+  const promptForPassword = async (): Promise<string | null> => {
+    // This is a simple implementation; replace with your actual UI for password entry
+    // For example, you might want to show a modal with password field
+    const password = window.prompt("Please enter your password to disable 2FA");
+    return password;
+  };
+  
+  const ensureValidSession = async (): Promise<boolean> => {
+    try {
+      // Get the current session from supabase
+      const { data, error } = await authService.getCurrentSession();
+      
+      if (error || !data?.session) {
+        console.error('Invalid session:', error || 'No session data');
+        setError("You must be logged in to use two-factor authentication. Please log in again.");
+        setIsLoading(false);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Session check failed:', error);
+      setError("Authentication session verification failed.");
+      setIsLoading(false);
+      return false;
+    }
+  };
+  
   const handleDisable2FA = async () => {
     try {
       setIsLoading(true);
       setError("");
       
-      // In production, this would call the real 2FA disable API
-      // await authService.disableTwoFactorAuth();
+      // First ensure we have a valid session
+      if (!await ensureValidSession()) return;
       
-      // Mock disabling 2FA for development
-      setTimeout(() => {
+      // Get password from user for verification
+      const password = await promptForPassword();
+      if (!password) {
+        setIsLoading(false);
+        return; // User cancelled
+      }
+      
+      // Call the real 2FA disable API with the password
+      const success = await authService.disableMFA(password);
+      
+      if (success) {
         setTwoFactorEnabled(false);
         if (updateSecurityPreferences) {
           updateSecurityPreferences({
-            multifactorAuthEnabled: false
+            multifactorAuthEnabled: false,
+            backupCodesGenerated: false
           });
         }
-        setIsLoading(false);
-        closeModal();
-      }, 1000);
-    } catch (error: any) {
-      setError(error.message || "Failed to disable two-factor authentication");
+      }
+      setIsLoading(false);
+      closeModal();
+    } catch (error: unknown) {
+      const authError = error as AuthError;
+      setError(authError.message || "Failed to disable two-factor authentication");
       setIsLoading(false);
     }
   };
@@ -95,29 +211,47 @@ export default function UserSecurityCard() {
         throw new Error("Please enter a 6-digit verification code");
       }
       
-      // In production, this would call the real 2FA verification API
-      // await authService.verifyTwoFactorAuth(verificationCode);
+      // Call the real 2FA verification API
+      const result = await authService.verifyMFA(verificationCode);
       
-      // Mock verification for development
-      setTimeout(() => {
-        // Generate mock recovery codes
-        const mockRecoveryCodes = Array.from({ length: 10 }, () => 
-          Math.random().toString(36).substring(2, 10).toUpperCase()
-        );
-        
-        setRecoveryCodes(mockRecoveryCodes);
-        setTwoFactorEnabled(true);
-        if (updateSecurityPreferences) {
-          updateSecurityPreferences({
-            multifactorAuthEnabled: true
-          });
-        }
-        setIsLoading(false);
-        setStep("complete");
-      }, 1000);
-    } catch (error: any) {
-      setError(error.message || "Failed to verify the code");
+      if (!result.success) {
+        throw new Error(result.message || "Failed to verify the code");
+      }
+      
+      if (result.recoveryCodes) {
+        setRecoveryCodes(result.recoveryCodes);
+      }
+      
+      setTwoFactorEnabled(true);
+      if (updateSecurityPreferences) {
+        updateSecurityPreferences({
+          multifactorAuthEnabled: true,
+          backupCodesGenerated: true
+        });
+      }
       setIsLoading(false);
+      setStep("complete");
+    } catch (error: unknown) {
+      const authError = error as AuthError;
+      setError(authError.message || "Failed to verify the code");
+      setIsLoading(false);
+    }
+  };
+
+  // Continue to next step based on current step
+  const handleContinue = async () => {
+    setError(""); // Clear any existing errors
+    
+    try {
+      if (step === "setup") {
+        await handleEnable2FA();
+      } else if (step === "verify") {
+        // Verify the code
+        await handleVerify2FA();
+      }
+    } catch (err) {
+      console.error('Error in continue flow:', err);
+      // Error is already set in the individual handlers
     }
   };
 
@@ -217,25 +351,115 @@ export default function UserSecurityCard() {
                   <Button size="sm" variant="outline" onClick={closeModal} disabled={isLoading}>
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleEnable2FA} loading={isLoading}>
+                  <Button size="sm" onClick={handleContinue} loading={isLoading}>
                     Continue
                   </Button>
                 </div>
               </div>
             )}
-
-            {/* QR Code display */}
+            
+            {/* QR Code and Verification Step */}
             {step === "verify" && showQRCode && (
-              <div className="mb-6">
-                <div className="mb-6 flex justify-center">
-                  <div className="bg-white p-4 rounded-lg">
-                    {/* Mock QR code - In production, this would be a real QR code image */}
-                    <div className="w-48 h-48 bg-gray-200 flex items-center justify-center">
-                      <p className="text-sm text-gray-600 text-center p-4">
-                        QR Code Placeholder<br/>
-                        (In production, scan this with your authenticator app)
-                      </p>
+              <div className="text-center">
+                <div className="mb-5">
+                  <p className="mb-4 text-gray-700 dark:text-gray-300">
+                    Scan this QR code with your authentication app (like Google Authenticator, Microsoft Authenticator, or Authy)
+                  </p>
+                  <div className="flex justify-center">
+                    {/* QR code container with forced white background to ensure visibility in dark mode */}
+                    <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg inline-block bg-white shadow-sm">
+                      {qrCode ? (
+                        <img 
+                          src={qrCode} 
+                          alt="2FA QR Code" 
+                          className="w-40 h-40 bg-white" /* Force white background on image */
+                          crossOrigin="anonymous"
+                          onLoad={() => console.log('QR code loaded successfully')}
+                          onError={(e) => {
+                            console.error('QR Code image failed to load, attempting fallback generation');
+                            const target = e.target as HTMLImageElement;
+                            target.onerror = null; // Prevent infinite error loop
+                            
+                            // Always try to generate a fallback QR code
+                            // Get the current user's email from localStorage or context
+                            let userEmail = 'user@example.com';
+                            try {
+                              // Try multiple storage locations
+                              const supabaseSession = localStorage.getItem('supabase.auth.token') || 
+                                                     sessionStorage.getItem('supabase.auth.token');
+                              if (supabaseSession) {
+                                const session = JSON.parse(supabaseSession);
+                                userEmail = session?.user?.email || userEmail;
+                                console.log('Found user email for QR code:', userEmail);
+                              }
+                            } catch (error) {
+                              console.warn('Error retrieving user email:', error);
+                            }
+                            
+                            // If we have a secret, generate a QR code
+                            if (secret && secret.length > 0) {
+                              console.log('Generating fallback QR code with secret:', secret.substring(0, 4) + '...');
+                              
+                              // Format a proper TOTP URI
+                              const timestamp = new Date().getTime().toString().slice(-5);
+                              const issuer = encodeURIComponent(`TailAdmin-${timestamp}`);
+                              const email = encodeURIComponent(userEmail);
+                              const secretEncoded = encodeURIComponent(secret);
+                              
+                              // Create a proper otpauth:// URL
+                              const totpUri = `otpauth://totp/${issuer}:${email}?secret=${secretEncoded}&issuer=${issuer}`;
+                              
+                              // Use Google Charts API for reliable QR code generation
+                              const googleChartsUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chld=L|0&chl=${encodeURIComponent(totpUri)}`;
+                              
+                              console.log('Using Google Charts fallback QR code');
+                              target.src = googleChartsUrl;
+                            } else if (manualEntryCode && manualEntryCode.length > 0) {
+                              // Try with manual entry code if available
+                              console.log('Using manual entry code for fallback QR');
+                              const timestamp = new Date().getTime().toString().slice(-5);
+                              const issuer = encodeURIComponent(`TailAdmin-${timestamp}`);
+                              const email = encodeURIComponent(userEmail);
+                              const secretEncoded = encodeURIComponent(manualEntryCode);
+                              const totpUri = `otpauth://totp/${issuer}:${email}?secret=${secretEncoded}&issuer=${issuer}`;
+                              target.src = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chld=L|0&chl=${encodeURIComponent(totpUri)}`;
+                            } else {
+                              // Last resort fallback - error message
+                              console.error('No secret available for QR code generation');
+                              target.src = 'data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" fill="white"/><text x="50%" y="50%" font-family="sans-serif" font-size="12" text-anchor="middle" dominant-baseline="middle" fill="black">QR Code Error</text></svg>';
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-40 h-40 flex items-center justify-center bg-white text-gray-500">
+                          <div className="flex flex-col items-center">
+                            <svg className="animate-spin h-6 w-6 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Loading QR Code...</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  </div>
+                  <div className="mt-2 text-center">
+                    <button 
+                      className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                      onClick={async () => {
+                        console.log('Refreshing QR code');
+                        await handleEnable2FA();
+                      }}
+                      disabled={isLoading}
+                    >
+                      Refresh QR Code
+                    </button>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">If you can't scan the QR code, you can manually enter this setup key:</p>
+                    <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono overflow-auto select-all break-all">
+                      {manualEntryCode || (secret || '')}
+                    </pre>
                   </div>
                 </div>
                 
@@ -269,20 +493,21 @@ export default function UserSecurityCard() {
               </div>
             )}
 
-            {/* Step 3: Complete - Show recovery codes */}
+            {/* Recovery Codes Display Step */}
             {step === "complete" && (
               <div className="mb-6">
                 <div className="mb-4">
                   <p className="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
                     Your recovery codes (save these somewhere safe):
                   </p>
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4 font-mono text-sm">
-                    {recoveryCodes.map((code, index) => (
-                      <div key={index} className="mb-1 flex justify-between">
-                        <span>{code}</span>
-                        <span className="text-gray-500 dark:text-gray-400">{index + 1}/10</span>
-                      </div>
-                    ))}
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      {recoveryCodes.map((codeObj, index) => (
+                        <div key={index} className="text-sm font-mono bg-gray-100 dark:bg-gray-800 p-1 text-center rounded">
+                          {codeObj.code}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <p className="text-sm text-red-600 dark:text-red-400 mb-4">
                     ⚠️ Keep these codes in a safe place. They allow you to recover your account if you lose access to your authenticator app.
@@ -291,8 +516,8 @@ export default function UserSecurityCard() {
                 
                 <div className="flex items-center gap-3">
                   <Button size="sm" onClick={handleFinish}>
-                    Done
-                  </Button>
+                     Done
+                   </Button>
                 </div>
               </div>
             )}

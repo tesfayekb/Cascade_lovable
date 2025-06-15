@@ -24,7 +24,7 @@ export interface User {
   passwordLastChanged?: Date;
   securityPreferences?: SecurityPreferences;
   // Extensible for future project-specific attributes
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
 }
 
 export interface SecurityPreferences {
@@ -67,7 +67,7 @@ export interface TenantSettings {
   requireAdminApproval: boolean;
   allowedAuthProviders: string[];
   // Other tenant-specific settings
-  [key: string]: any;
+  [key: string]: string | boolean | string[] | number | undefined;
 }
 
 export interface AuthTokens {
@@ -104,7 +104,7 @@ export interface RegisterData {
   meta?: {
     firstName?: string;
     lastName?: string;
-    [key: string]: any;
+    [key: string]: string | number | boolean | undefined;
   };
 }
 
@@ -143,6 +143,31 @@ export interface TenantSwitchResponse {
 
 export interface RoleSwitchResponse {
   role: Role;
+}
+
+/**
+ * Response structure for MFA enrollment initialization
+ */
+export interface MFAEnrollResponse {
+  secret: string;
+  qrCode: string;
+}
+
+/**
+ * Structure of an individual recovery code
+ */
+export interface RecoveryCode {
+  code: string;
+  used: boolean;
+}
+
+/**
+ * Response structure for MFA verification
+ */
+export interface MFAVerifyResponse {
+  success: boolean;
+  message: string;
+  recoveryCodes?: RecoveryCode[];
 }
 
 export interface InvitationResponse {

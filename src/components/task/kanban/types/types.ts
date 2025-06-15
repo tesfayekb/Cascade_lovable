@@ -12,6 +12,7 @@ export interface Task {
     name: string;
     color: string;
   };
+  index?: number; // Added to support DnD operations
 }
 
 export interface DropResult {

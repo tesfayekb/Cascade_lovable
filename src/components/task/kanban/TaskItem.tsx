@@ -9,6 +9,9 @@ interface TaskItemProps {
   changeTaskStatus: (taskId: string, newStatus: string) => void;
 }
 
+// Define a type that includes the index property used in drag and drop operations
+type DragItem = Task & { index: number };
+
 const TaskItem: React.FC<TaskItemProps> = ({
   task,
   index,
@@ -18,7 +21,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ handlerId }, drop] = useDrop<
-    Task,
+    DragItem,
     DropResult,
     { handlerId: string | symbol | null }
   >({
@@ -29,7 +32,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
       };
     },
     drop: () => ({ name: task.status }),
-    hover(item: any, monitor) {
+    hover(item: DragItem, monitor) {
       if (!ref.current) {
         return;
       }
@@ -60,7 +63,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   });
 
   const [{ isDragging }, drag] = useDrag<
-    Task,
+    DragItem,
     DropResult,
     { isDragging: boolean }
   >({
@@ -71,7 +74,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-    end: (item, monitor) => {
+    end: (item: DragItem, monitor) => {
       const dropResult = monitor.getDropResult();
       if (dropResult) {
         changeTaskStatus(item.id, dropResult.name);
