@@ -1,0 +1,58 @@
+{
+  "projectName": "TailAdmin React TypeScript Pro",
+  "version": "2.1.2",
+  "projectArchitecture": "component-based",
+  "framework": {
+    "name": "React",
+    "version": "19.0.0",
+    "typescript": true,
+    "buildTool": "vite"
+  },
+  "styling": {
+    "primary": "tailwindcss",
+    "version": "4.0.0",
+    "approach": "utility-first",
+    "theme": {
+      "mode": "light-dark",
+      "colors": {
+        "brand": {
+          "primary": "#465fff"
+        }
+      }
+    }
+  },
+  "fileStructure": {
+    "components": "src/components/*/*.tsx",
+    "pages": "src/pages/*/*.tsx",
+    "layout": "src/layout/*.tsx",
+    "context": "src/context/*.tsx",
+    "hooks": "src/hooks/*.ts"
+  },
+  "codePatterns": {
+    "component": {
+      "naming": "PascalCase",
+      "imports": [
+        "External libraries first",
+        "Internal components",
+        "Hooks and contexts",
+        "Icons and assets"
+      ],
+      "props": "Interface with explicit types",
+      "styling": "Direct Tailwind classes"
+    },
+    "state": {
+      "local": "useState",
+      "global": "Context API"
+    },
+    "routing": "React Router with layout-wrapped routes"
+  },
+  "aiRules": [
+    "Preserve existing folder structure and organization",
+    "Keep component naming consistent with established patterns",
+    "Use Tailwind CSS utility classes directly in components",
+    "Follow existing React Context patterns for state management",
+    "Maintain dark mode support using dark: variant prefix",
+    "Use existing UI components and extend them rather than creating new variants",
+    "Add new routes in App.tsx following the established pattern"
+  ]
+}
