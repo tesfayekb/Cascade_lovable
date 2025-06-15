@@ -14,6 +14,7 @@ import {
   AuthState, 
   LoginCredentials, 
   RegisterData,
+  SecurityPreferences,
   User
 } from '../../types/auth';
 
@@ -39,6 +40,7 @@ type AuthAction =
   | { type: 'SWITCH_ROLE'; payload: { currentRole: AuthState['currentRole'] } }
   | { type: 'SWITCH_TENANT'; payload: { tenant: AuthState['tenant']; availableRoles: AuthState['availableRoles'] } }
   | { type: 'UPDATE_USER'; payload: { user: User } }
+  | { type: 'UPDATE_SECURITY_PREFERENCES'; payload: { securityPreferences: Partial<User['securityPreferences']> } }
   | { type: 'START_IMPERSONATION'; payload: { originalUser: User; user: User; tenant: AuthState['tenant']; currentRole: AuthState['currentRole']; availableRoles: AuthState['availableRoles'] } }
   | { type: 'STOP_IMPERSONATION'; payload: { user: User; tenant: AuthState['tenant']; currentRole: AuthState['currentRole']; availableRoles: AuthState['availableRoles'] } }
   | { type: 'SET_LOADING'; payload: boolean };
@@ -90,6 +92,25 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
       return {
         ...state,
         user: action.payload.user
+      };
+      
+    case 'UPDATE_SECURITY_PREFERENCES':
+      if (!state.user) return state;
+      
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          securityPreferences: {
+            ...(state.user.securityPreferences || {
+              multifactorAuthEnabled: false,
+              backupCodesGenerated: false,
+              rememberDevices: false,
+              notifyOnNewLogin: false
+            }),
+            ...action.payload.securityPreferences
+          }
+        }
       };
       
     case 'START_IMPERSONATION':
@@ -430,32 +451,80 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }): React.R
       throw error;
     }
   }, [state.isImpersonating, state.originalUser, state.tenant, state.currentRole, state.availableRoles]);
-  
 
-  
-  // Create the context value with memoization to prevent unnecessary re-renders
-  const contextValue = useMemo(
-    () => ({
-      ...state,
-      login,
-      register,
-      logout,
-      switchRole,
-      switchTenant,
-      resetPassword,
-      updateProfile,
-      hasPermission,
-      ...(state.isSuperadmin && { impersonateUser }),
-      ...(state.isImpersonating && { stopImpersonation })
-    }),
-    [state, login, register, logout, switchRole, switchTenant, resetPassword, updateProfile, hasPermission, state.isSuperadmin, state.isImpersonating, impersonateUser, stopImpersonation]
-  );
-  
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  );
+  /**
+   * Update user's security preferences
+   */
+  const updateSecurityPreferences = useCallback(async (securityPreferences: Partial<SecurityPreferences>) => {
+  try {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    
+    // In a real implementation, we would call authService to update security preferences
+    // await authService.updateSecurityPreferences(securityPreferences);
+    
+    // For now, just update the state directly
+    dispatch({ 
+      type: 'UPDATE_SECURITY_PREFERENCES', 
+      payload: { securityPreferences }
+    });
+    
+    dispatch({ type: 'SET_LOADING', payload: false });
+    return Promise.resolve();
+  } catch (error) {
+    console.error('Failed to update security preferences:', error);
+    dispatch({ type: 'SET_LOADING', payload: false });
+    return Promise.reject(error);
+  }
+}, []);
+
+// Create the context value with memoization to prevent unnecessary re-renders
+const contextValue = useMemo(
+  () => ({
+    // State
+    user: state.user,
+    tenant: state.tenant,
+    currentRole: state.currentRole,
+    availableRoles: state.availableRoles,
+    availableTenants: state.availableTenants,
+    isAuthenticated: state.isAuthenticated,
+    isLoading: state.isLoading,
+    isImpersonating: state.isImpersonating,
+    isSuperadmin: state.isSuperadmin,
+    
+    // Authentication methods
+    login,
+    register,
+    logout,
+    switchRole,
+    switchTenant,
+    resetPassword,
+    updateProfile,
+    updateSecurityPreferences,
+    hasPermission,
+    impersonateUser,
+    stopImpersonation,
+  }),
+  [
+    state,
+    login,
+    register,
+    logout,
+    switchRole,
+    switchTenant,
+    resetPassword,
+    updateProfile,
+    updateSecurityPreferences,
+    hasPermission,
+    impersonateUser,
+    stopImpersonation
+  ]
+);
+
+return (
+  <AuthContext.Provider value={contextValue}>
+    {children}
+  </AuthContext.Provider>
+);
 };
 
 /**
