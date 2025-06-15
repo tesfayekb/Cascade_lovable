@@ -13,6 +13,7 @@ import {
   AuthContextType, 
   AuthState, 
   LoginCredentials, 
+  RegisterData,
   User
 } from '../../types/auth';
 
@@ -192,6 +193,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }): React.R
     }
   }, []);
   
+  /**
+   * Register a new user with email and password
+   */
+  const register = useCallback(async (data: RegisterData) => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      
+      // Call the register method from authService
+      await authService.register(data);
+      
+      dispatch({ type: 'SET_LOADING', payload: false });
+    } catch (error) {
+      console.error('Registration failed:', error);
+      dispatch({ type: 'SET_LOADING', payload: false });
+      throw error;
+    }
+  }, []);
+
   /**
    * Log out the current user
    */
@@ -412,32 +431,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }): React.R
     }
   }, [state.isImpersonating, state.originalUser, state.tenant, state.currentRole, state.availableRoles]);
   
+
+  
   // Create the context value with memoization to prevent unnecessary re-renders
-  const contextValue = useMemo<AuthContextType>(() => ({
-    ...state,
-    login,
-    logout,
-    switchRole,
-    switchTenant,
-    resetPassword,
-    updateProfile,
-    hasPermission,
-    ...(state.isSuperadmin && { impersonateUser }),
-    ...(state.isImpersonating && { stopImpersonation })
-  }), [
-    state,
-    login,
-    logout,
-    switchRole,
-    switchTenant,
-    resetPassword,
-    updateProfile,
-    hasPermission,
-    state.isSuperadmin,
-    state.isImpersonating,
-    impersonateUser,
-    stopImpersonation
-  ]);
+  const contextValue = useMemo(
+    () => ({
+      ...state,
+      login,
+      register,
+      logout,
+      switchRole,
+      switchTenant,
+      resetPassword,
+      updateProfile,
+      hasPermission,
+      ...(state.isSuperadmin && { impersonateUser }),
+      ...(state.isImpersonating && { stopImpersonation })
+    }),
+    [state, login, register, logout, switchRole, switchTenant, resetPassword, updateProfile, hasPermission, state.isSuperadmin, state.isImpersonating, impersonateUser, stopImpersonation]
+  );
   
   return (
     <AuthContext.Provider value={contextValue}>

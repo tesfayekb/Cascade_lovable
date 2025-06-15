@@ -28,7 +28,11 @@ This approach provides:
 ### 1.1 Authentication & User Management
 - [x] Create `AuthContext` for global auth state with Supabase integration
 - [x] Implement JWT token handling with 30-minute access tokens and auto-refresh
-- [ ] Enhance existing login/signup forms
+- [x] Enhance existing login/signup forms with validation and AuthContext integration
+- [ ] **Supabase Project Setup and Integration**
+  - [ ] Create Supabase project and configure authentication settings
+  - [ ] Set up proper environment variables for production/development
+  - [ ] Configure email templates for verification and password reset
 - [ ] Add two-factor authentication UI
 - [ ] Create user profile management components with extensibility for future attributes
 - [ ] Add user listing and administrative UI with impersonation features
