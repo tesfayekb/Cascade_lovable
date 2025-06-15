@@ -1,14 +1,86 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { useState, FormEvent } from "react";
+import { Link, useNavigate } from "react-router";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
+import { useAuth } from "../../context/auth";
+import { LoginCredentials } from "../../types/auth";
 
-export default function SignInForm() {
+// Alert component for form errors/success messages
+interface AlertProps {
+  type: 'error' | 'success';
+  message: string;
+}
+
+const Alert: React.FC<AlertProps> = ({ type, message }) => {
+  const bgColor = type === 'error' ? 'bg-error-50 dark:bg-error-900/20' : 'bg-success-50 dark:bg-success-900/20';
+  const textColor = type === 'error' ? 'text-error-700 dark:text-error-400' : 'text-success-700 dark:text-success-400';
+  const borderColor = type === 'error' ? 'border-error-100 dark:border-error-900/30' : 'border-success-100 dark:border-success-900/30';
+  
+  return (
+    <div className={`p-4 mb-4 rounded-lg border ${borderColor} ${bgColor}`}>
+      <p className={`text-sm font-medium ${textColor}`}>{message}</p>
+    </div>
+  );
+};
+
+const SignInForm: React.FC = () => {
+  const { login, isLoading } = useAuth();
+  const navigate = useNavigate();
+  
+  // Form state
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  
+  // Form validation
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  
+  const handleSubmit = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    
+    // Don't resubmit while loading
+    if (isLoading) return;
+    setError(null);
+    
+    try {
+      // Basic validation
+      if (!email.trim()) {
+        setError('Email is required');
+        return;
+      }
+      if (!password) {
+        setError('Password is required');
+        return;
+      }
+      
+      // Prepare credentials with remember me option
+      const credentials: LoginCredentials = {
+        email,
+        password,
+        rememberMe: isChecked
+      };
+      
+      // Attempt login
+      await login(credentials);
+      
+      // Show success and redirect
+      setSuccess('Login successful! Redirecting...');
+      
+      // Redirect after a short delay to allow the user to see the success message
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign in. Please check your credentials.');
+    }
+  };
+  
   return (
     <div className="flex flex-col flex-1">
       <div className="w-full max-w-md pt-10 mx-auto">
@@ -83,13 +155,21 @@ export default function SignInForm() {
                 </span>
               </div>
             </div>
-            <form>
+            {error && <Alert type="error" message={error} />}
+            {success && <Alert type="success" message={success} />}
+            
+            <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>
                   <Label>
                     Email <span className="text-error-500">*</span>{" "}
                   </Label>
-                  <Input placeholder="info@gmail.com" />
+                  <Input 
+                    placeholder="info@gmail.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                  />
                 </div>
                 <div>
                   <Label>
@@ -99,6 +179,10 @@ export default function SignInForm() {
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                      aria-label="Password input"
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}
@@ -127,8 +211,13 @@ export default function SignInForm() {
                   </Link>
                 </div>
                 <div>
-                  <Button className="w-full" size="sm">
-                    Sign in
+                  <Button 
+                    className="w-full" 
+                    size="sm" 
+                    onClick={() => handleSubmit()}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Signing in...' : 'Sign in'}
                   </Button>
                 </div>
               </div>
@@ -150,4 +239,6 @@ export default function SignInForm() {
       </div>
     </div>
   );
-}
+};
+
+export default SignInForm;

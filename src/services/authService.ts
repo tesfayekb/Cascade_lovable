@@ -13,6 +13,7 @@ import {
   AuthTokens,
   LoginCredentials,
   LoginResponse,
+  RegisterData,
   RoleSwitchResponse,
   TenantSwitchResponse,
   TokenResponse,
@@ -22,6 +23,9 @@ import {
 // Token refresh threshold: 75% of token lifetime (22.5 minutes for 30-minute tokens)
 const TOKEN_REFRESH_THRESHOLD = 0.75;
 
+// Enable this for development without a real Supabase backend
+const USE_MOCK_AUTH = true;
+
 class AuthService {
   private accessToken: string | null = null;
   private refreshTokenValue: string | null = null;
@@ -29,10 +33,144 @@ class AuthService {
   private refreshTimerId: number | null = null;
 
   /**
-   * Login with email and password
+   * Register a new user with email and password
+   * @param data Registration data including email, password and optional metadata
+   */
+  async register(data: RegisterData): Promise<void> {
+    if (USE_MOCK_AUTH) {
+      console.log('MOCK MODE: Registration successful', data);
+      // Simulate a slight delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return;
+    }
+    
+    try {
+      const { email, password, meta } = data;
+      
+      // Use Supabase authentication to sign up
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: meta || {}
+        }
+      });
+      
+      if (error) {
+        throw new Error(error.message || 'Registration failed');
+      }
+      
+      // Return success, user will need to verify their email
+      return;
+    } catch (error) {
+      console.error('Registration failed:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Log in with email and password
    * @param credentials Login credentials including email, password, tenant, and remember me option
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    if (USE_MOCK_AUTH) {
+      console.log('MOCK MODE: Authentication successful', credentials);
+      
+      // Simulate a slight delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Return mock data
+      const mockUser: User = {
+        id: 'mock-user-123',
+        email: credentials.email,
+        firstName: 'Mock',
+        lastName: 'User',
+        metadata: {
+          avatarUrl: 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        registrationDate: new Date(),
+        lastLogin: null,
+        failedLoginAttempts: 0,
+        lastFailedLogin: null,
+        roles: [],
+        twoFactorEnabled: false,
+        isActive: true,
+        securityPreferences: {
+          multifactorAuthEnabled: false,
+          backupCodesGenerated: false,
+          rememberDevices: true,
+          notifyOnNewLogin: false
+        },
+      };
+      
+      // Mock token expiration in 30 minutes
+      const expiresAt = Math.floor(Date.now() / 1000) + 30 * 60;
+      
+      this.setTokens({
+        accessToken: 'mock-access-token',
+        refreshToken: 'mock-refresh-token',
+        expiresIn: 1800,
+        expiresAt
+      });
+
+      // In a real implementation, we would make additional API calls to get user roles, 
+      // tenant info and other data. For now, we'll mock this data.
+
+      // Mock user data (in real app, this would come from an API call)
+      const mockUserRoles = [
+        {
+          id: 'role-1',
+          name: 'User',
+          description: 'Default user role',
+          isSystemRole: true,
+          permissions: [
+            { resource: 'profile', action: 'view' },
+            { resource: 'profile', action: 'edit' }
+          ]
+        }
+      ];
+
+      // Mock tenant data
+      const mockTenant = credentials.tenantId 
+        ? { 
+            id: credentials.tenantId, 
+            name: `Tenant ${credentials.tenantId}`, 
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          } 
+        : null;
+        
+      // Mock available tenants
+      const mockTenants = [
+        {
+          id: 'tenant-1',
+          name: 'Demo Company',
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      ];
+
+      // Safely handle token expiration dates with proper type checking
+      const expiresAtTime = expiresAt;
+      
+      return {
+        user: mockUser,
+        tenant: mockTenant,
+        tokens: {
+          accessToken: 'mock-access-token',
+          refreshToken: 'mock-refresh-token',
+          expiresIn: 1800, // Default to 30 mins if undefined
+          expiresAt: expiresAtTime
+        },
+        availableRoles: mockUserRoles,
+        availableTenants: mockTenants
+      };
+    }
+    
     try {
       const { email, password } = credentials;
       

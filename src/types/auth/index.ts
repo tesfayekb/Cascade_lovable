@@ -98,8 +98,19 @@ export interface LoginCredentials {
   rememberMe?: boolean;
 }
 
+export interface RegisterData {
+  email: string;
+  password: string;
+  meta?: {
+    firstName?: string;
+    lastName?: string;
+    [key: string]: any;
+  };
+}
+
 export interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (roleId: string) => Promise<void>;
   switchTenant: (tenantId: string) => Promise<void>;
