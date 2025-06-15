@@ -116,6 +116,7 @@ export interface AuthContextType extends AuthState {
   switchTenant: (tenantId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateProfile: (userData: Partial<User>) => Promise<void>;
+  updateSecurityPreferences: (preferences: Partial<SecurityPreferences>) => Promise<void>;
   hasPermission: (permission: string) => boolean;
   impersonateUser?: (userId: string) => Promise<void>; // Superadmin only
   stopImpersonation?: () => Promise<void>; // When impersonating
