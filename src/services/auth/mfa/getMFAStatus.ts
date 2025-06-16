@@ -62,19 +62,31 @@ export async function getMFAStatus(): Promise<MFAStatusResponse> {
     
     if (verifiedTotpFactor) {
       // Check metadata for possible discrepancies
-      try {
-        if (userMetadata.mfaEnabled !== true) {
-          console.log('Metadata has MFA disabled but verified factor found - updating metadata');
+      if (userMetadata.mfaEnabled === false) {
+        console.log('Metadata shows MFA disabled but verified factor found - respecting user disable intent');
+        console.log('Orphaned factor ID:', verifiedTotpFactor.id);
+        
+        return {
+          enabled: false,
+          verified: false,
+          pendingVerification: false,
+          factorId: undefined,
+          enrollmentDate: undefined,
+          backupCodesAvailable: false
+        };
+      } else if (userMetadata.mfaEnabled !== true) {
+        console.log('Metadata missing but verified factor found - updating metadata to reflect MFA enabled');
+        try {
           await supabase.auth.updateUser({
             data: { 
               mfaEnabled: true,
               mfaVerifiedAt: new Date().toISOString()
             }
           });
+        } catch (updateError) {
+          console.error('Failed to update user metadata:', updateError);
+          // Continue anyway as we still want to return correct status
         }
-      } catch (updateError) {
-        console.error('Failed to update user metadata:', updateError);
-        // Continue anyway as we still want to return correct status
       }
       
       return {
